@@ -1,0 +1,37 @@
+{
+  "sparsity_90": {
+    "magnitude_acc": [
+      0.9966666666666667,
+      0.0
+    ],
+    "single_batch_saliency_acc": [
+      0.9926666666666666,
+      0.0024944382578493043
+    ],
+    "accum_saliency_acc": [
+      0.9926666666666668,
+      0.0024944382578493043
+    ],
+    "accum_minus_magnitude": -0.0039999999999998925,
+    "combined_std": 0.0024944382578493043,
+    "difference_within_noise": false
+  },
+  "sparsity_95": {
+    "magnitude_acc": [
+      0.9966666666666667,
+      0.0
+    ],
+    "single_batch_saliency_acc": [
+      0.9886666666666667,
+      0.0026666666666666397
+    ],
+    "accum_saliency_acc": [
+      0.9913333333333332,
+      0.00339934634239519
+    ],
+    "accum_minus_magnitude": -0.005333333333333523,
+    "combined_std": 0.00339934634239519,
+    "difference_within_noise": false
+  },
+  "claim": "Single-batch saliency (|w*grad| from one minibatch) is a noisy importance estimate and underperforms magnitude pruning. Accumulating saliency over an epoch reduces this noise. The committed per-seed numbers show whether the accumulated version closes the gap on two-spirals; differences within combined std are treated as noise, not signal."
+}

@@ -23,8 +23,7 @@ def cubic_schedule(step, total_steps, s_initial=0.0, s_final=0.9,
 
 
 class Pruner:
-
-    def __init__(self, model, optimizer, criterion='saliency',
+    def __init__(self, model, optimizer, criterion='accum_saliency',
                  s_final=0.9, total_steps=1000, prune_start=0,
                  prune_end=None, prune_every=50, allow_regrowth=False):
         self.model = model
@@ -45,37 +44,58 @@ class Pruner:
                     self.w_param_index[li] = pi
                     break
 
-    def _importance(self, layer):
+        self._accum = [np.zeros_like(l.W.data) for l in self.linear_layers]
+        self._accum_count = 0
+
+    def accumulate(self):
+        for i, layer in enumerate(self.linear_layers):
+            self._accum[i] += np.abs(layer.W.data * layer.W.grad)
+        self._accum_count += 1
+
+    def _reset_accum(self):
+        for a in self._accum:
+            a[:] = 0.0
+        self._accum_count = 0
+
+    def _importance(self, li, layer):
         if self.criterion == 'magnitude':
             return np.abs(layer.W.data)
         elif self.criterion == 'saliency':
             return np.abs(layer.W.data * layer.W.grad)
+        elif self.criterion == 'accum_saliency':
+            if self._accum_count == 0:
+                return np.abs(layer.W.data * layer.W.grad)
+            return self._accum[li] / self._accum_count
         else:
             raise ValueError(f"unknown criterion {self.criterion}")
 
     def maybe_prune(self, step):
-        """Call after optimizer.step(). Applies the schedule and updates masks."""
         if step < self.prune_start or (step % self.prune_every != 0):
             return
         target_sparsity = cubic_schedule(
             step, self.total_steps, 0.0, self.s_final,
             self.prune_start, self.prune_end)
         self._apply_sparsity(target_sparsity)
+        self._reset_accum()
 
     def _apply_sparsity(self, target_sparsity):
         all_scores = []
-        for layer in self.linear_layers:
-            all_scores.append(self._importance(layer).flatten())
+        for li, layer in enumerate(self.linear_layers):
+            scores = self._importance(li, layer)
+            surviving = scores[layer.mask == 1]
+            all_scores.append(surviving.flatten())
         flat = np.concatenate(all_scores)
-        n_total = flat.size
+        n_total = sum(l.mask.size for l in self.linear_layers)
         n_prune = int(round(target_sparsity * n_total))
-        if n_prune <= 0:
+        n_currently_pruned = int(sum((l.mask == 0).sum() for l in self.linear_layers))
+        n_to_prune = n_prune - n_currently_pruned
+        if n_to_prune <= 0:
             return
 
-        threshold = np.partition(flat, n_prune - 1)[n_prune - 1]
+        threshold = np.partition(flat, n_to_prune - 1)[n_to_prune - 1]
 
         for li, layer in enumerate(self.linear_layers):
-            scores = self._importance(layer)
+            scores = self._importance(li, layer)
             new_mask = (scores > threshold).astype(np.float64)
 
             if self.allow_regrowth:
